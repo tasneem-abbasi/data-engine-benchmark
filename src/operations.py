@@ -1,4 +1,4 @@
-"""The six benchmark operations, implemented per engine."""
+"""The benchmark operations, implemented per engine."""
 
 import duckdb
 import pandas as pd
@@ -9,8 +9,8 @@ PARQUET = "data/klines.parquet"
 
 # ---------------- pandas ----------------
 
-def pandas_read():
-    return pd.read_parquet(PARQUET)
+def pandas_read(path=PARQUET):
+    return pd.read_parquet(path)
 
 
 def pandas_filter(df):
@@ -43,10 +43,12 @@ def pandas_rolling(df):
 
 def pandas_sort(df):
     return df.sort_values(["symbol", "open_time"])
+
+
 # ---------------- polars ----------------
 
-def polars_read():
-    return pl.read_parquet(PARQUET)
+def polars_read(path=PARQUET):
+    return pl.read_parquet(path)
 
 
 def polars_filter(df):
@@ -87,20 +89,21 @@ def polars_sort(df):
 
 
 # ---------------- duckdb ----------------
+# These take a connection AND a path, so they can query any slice file.
 
-def duckdb_read(con):
-    return con.execute("SELECT * FROM read_parquet('data/klines.parquet')").df()
+def duckdb_read(con, path=PARQUET):
+    return con.execute(f"SELECT * FROM read_parquet('{path}')").df()
 
 
-def duckdb_filter(con):
-    return con.execute("""
-        SELECT * FROM read_parquet('data/klines.parquet')
+def duckdb_filter(con, path=PARQUET):
+    return con.execute(f"""
+        SELECT * FROM read_parquet('{path}')
         WHERE volume > 10 AND open_time >= '2024-06-01'
     """).df()
 
 
-def duckdb_groupby(con):
-    return con.execute("""
+def duckdb_groupby(con, path=PARQUET):
+    return con.execute(f"""
         SELECT symbol,
                date_trunc('day', open_time) AS day,
                first(open ORDER BY open_time) AS open,
@@ -108,42 +111,42 @@ def duckdb_groupby(con):
                min(low) AS low,
                last(close ORDER BY open_time) AS close,
                sum(volume) AS volume
-        FROM read_parquet('data/klines.parquet')
+        FROM read_parquet('{path}')
         GROUP BY symbol, day
         ORDER BY symbol, day
     """).df()
 
 
-def duckdb_join(con):
-    return con.execute("""
+def duckdb_join(con, path=PARQUET):
+    return con.execute(f"""
         WITH daily AS (
             SELECT symbol,
                    date_trunc('day', open_time) AS day,
                    avg(volume) AS avg_daily_volume
-            FROM read_parquet('data/klines.parquet')
+            FROM read_parquet('{path}')
             GROUP BY symbol, day
         )
         SELECT k.*, d.avg_daily_volume
-        FROM read_parquet('data/klines.parquet') k
+        FROM read_parquet('{path}') k
         LEFT JOIN daily d
           ON k.symbol = d.symbol
          AND date_trunc('day', k.open_time) = d.day
     """).df()
 
 
-def duckdb_rolling(con):
-    return con.execute("""
+def duckdb_rolling(con, path=PARQUET):
+    return con.execute(f"""
         SELECT *,
                avg(close) OVER (
                    PARTITION BY symbol ORDER BY open_time
                    ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
                ) AS ma20
-        FROM read_parquet('data/klines.parquet')
+        FROM read_parquet('{path}')
     """).df()
 
 
-def duckdb_sort(con):
-    return con.execute("""
-        SELECT * FROM read_parquet('data/klines.parquet')
+def duckdb_sort(con, path=PARQUET):
+    return con.execute(f"""
+        SELECT * FROM read_parquet('{path}')
         ORDER BY symbol, open_time
     """).df()
