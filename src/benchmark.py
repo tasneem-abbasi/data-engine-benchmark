@@ -71,6 +71,24 @@ def main():
         path, n = make_slice(size)
         print(f"\n=== size: {n:,} rows ===")
 
+        # --- read is now TIMED, once per engine ---
+        print("running pandas read")
+        t, m = measure(ops.pandas_read, path)
+        rows.append({"engine": "pandas", "operation": "read",
+                     "rows": n, "median_time_s": t, "peak_mem_mb": m})
+
+        print("running polars read")
+        t, m = measure(ops.polars_read, path)
+        rows.append({"engine": "polars", "operation": "read",
+                     "rows": n, "median_time_s": t, "peak_mem_mb": m})
+
+        con = duckdb.connect()
+        print("running duckdb read")
+        t, m = measure(ops.duckdb_read, con, path)
+        rows.append({"engine": "duckdb", "operation": "read",
+                     "rows": n, "median_time_s": t, "peak_mem_mb": m})
+
+        # --- then the five operations, on already-loaded data ---
         df_pd = pd.read_parquet(path)
         for name, fn in PANDAS_OPS.items():
             print(f"running pandas {name}")
@@ -85,7 +103,6 @@ def main():
             rows.append({"engine": "polars", "operation": name,
                          "rows": n, "median_time_s": t, "peak_mem_mb": m})
 
-        con = duckdb.connect()
         for name, fn in DUCKDB_OPS.items():
             print(f"running duckdb {name}")
             t, m = measure(fn, con, path)
