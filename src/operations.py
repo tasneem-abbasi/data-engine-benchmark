@@ -43,3 +43,44 @@ def pandas_rolling(df):
 
 def pandas_sort(df):
     return df.sort_values(["symbol", "open_time"])
+# ---------------- polars ----------------
+
+def polars_read():
+    return pl.read_parquet(PARQUET)
+
+
+def polars_filter(df):
+    return df.filter(
+        (pl.col("volume") > 10) & (pl.col("open_time") >= pl.datetime(2024, 6, 1))
+    )
+
+
+def polars_groupby(df):
+    return (df.sort("open_time")
+              .group_by_dynamic("open_time", every="1d", group_by="symbol")
+              .agg(
+                  pl.col("open").first().alias("open"),
+                  pl.col("high").max().alias("high"),
+                  pl.col("low").min().alias("low"),
+                  pl.col("close").last().alias("close"),
+                  pl.col("volume").sum().alias("volume"),
+              ))
+
+
+def polars_join(df):
+    daily = (df.with_columns(pl.col("open_time").dt.date().alias("day"))
+               .group_by(["symbol", "day"])
+               .agg(pl.col("volume").mean().alias("avg_daily_volume")))
+    return (df.with_columns(pl.col("open_time").dt.date().alias("day"))
+              .join(daily, on=["symbol", "day"], how="left"))
+
+
+def polars_rolling(df):
+    return (df.sort(["symbol", "open_time"])
+              .with_columns(
+                  pl.col("close").rolling_mean(window_size=20).over("symbol").alias("ma20")
+              ))
+
+
+def polars_sort(df):
+    return df.sort(["symbol", "open_time"])
