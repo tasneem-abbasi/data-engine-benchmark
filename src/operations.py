@@ -84,3 +84,66 @@ def polars_rolling(df):
 
 def polars_sort(df):
     return df.sort(["symbol", "open_time"])
+
+
+# ---------------- duckdb ----------------
+
+def duckdb_read(con):
+    return con.execute("SELECT * FROM read_parquet('data/klines.parquet')").df()
+
+
+def duckdb_filter(con):
+    return con.execute("""
+        SELECT * FROM read_parquet('data/klines.parquet')
+        WHERE volume > 10 AND open_time >= '2024-06-01'
+    """).df()
+
+
+def duckdb_groupby(con):
+    return con.execute("""
+        SELECT symbol,
+               date_trunc('day', open_time) AS day,
+               first(open ORDER BY open_time) AS open,
+               max(high) AS high,
+               min(low) AS low,
+               last(close ORDER BY open_time) AS close,
+               sum(volume) AS volume
+        FROM read_parquet('data/klines.parquet')
+        GROUP BY symbol, day
+        ORDER BY symbol, day
+    """).df()
+
+
+def duckdb_join(con):
+    return con.execute("""
+        WITH daily AS (
+            SELECT symbol,
+                   date_trunc('day', open_time) AS day,
+                   avg(volume) AS avg_daily_volume
+            FROM read_parquet('data/klines.parquet')
+            GROUP BY symbol, day
+        )
+        SELECT k.*, d.avg_daily_volume
+        FROM read_parquet('data/klines.parquet') k
+        LEFT JOIN daily d
+          ON k.symbol = d.symbol
+         AND date_trunc('day', k.open_time) = d.day
+    """).df()
+
+
+def duckdb_rolling(con):
+    return con.execute("""
+        SELECT *,
+               avg(close) OVER (
+                   PARTITION BY symbol ORDER BY open_time
+                   ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
+               ) AS ma20
+        FROM read_parquet('data/klines.parquet')
+    """).df()
+
+
+def duckdb_sort(con):
+    return con.execute("""
+        SELECT * FROM read_parquet('data/klines.parquet')
+        ORDER BY symbol, open_time
+    """).df()
